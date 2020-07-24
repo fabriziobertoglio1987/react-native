@@ -7,6 +7,7 @@
 
 package com.facebook.react.views.view;
 
+import android.util.Log;
 import android.content.Context;
 import android.graphics.Canvas;
 import android.graphics.Color;
@@ -31,6 +32,7 @@ import com.facebook.react.uimanager.Spacing;
 import com.facebook.yoga.YogaConstants;
 import java.util.Arrays;
 import java.util.Locale;
+import java.lang.reflect.Method;
 
 /**
  * A subclass of {@link Drawable} used for background of {@link ReactViewGroup}. It supports drawing
@@ -1110,41 +1112,29 @@ public class ReactViewBackgroundDrawable extends Drawable {
 
           mPaint.setColor(fastBorderColor);
           mPaint.setStyle(Paint.Style.STROKE);
-          if (borderLeft > 0) {
-            mPathForSingleBorder.reset();
+          if (borderWidth.left > 0) {
             int width = Math.round(borderWidth.left);
-            updatePathEffect(width);
-            mPaint.setStrokeWidth(width);
-            mPathForSingleBorder.moveTo(left, top - borderWidth.top/2);
-            mPathForSingleBorder.lineTo(left, bottom + borderWidth.bottom/2);
-            canvas.drawPath(mPathForSingleBorder, mPaint);
+            PointF start = new PointF(left, top - borderWidth.top/2);
+            PointF end = new PointF(left, bottom + borderWidth.bottom/2);
+            drawSide(width, start, end, canvas);
           }
           if (borderTop > 0) {
-            mPathForSingleBorder.reset();
             int width = Math.round(borderWidth.top);
-            updatePathEffect(width);
-            mPaint.setStrokeWidth(width);
-            mPathForSingleBorder.moveTo(left, top);
-            mPathForSingleBorder.lineTo(right, top);
-            canvas.drawPath(mPathForSingleBorder, mPaint);
+            PointF start = new PointF(left, top);
+            PointF end = new PointF(right, top);
+            drawSide(width, start, end, canvas);
           }
           if (borderRight > 0) {
-            mPathForSingleBorder.reset();
             int width = Math.round(borderWidth.right);
-            updatePathEffect(width);
-            mPaint.setStrokeWidth(width);
-            mPathForSingleBorder.moveTo(right, top - borderWidth.top/2);
-            mPathForSingleBorder.lineTo(right, bottom + borderWidth.bottom/2);
-            canvas.drawPath(mPathForSingleBorder, mPaint);
+            PointF start = new PointF(right, top - borderWidth.top/2);
+            PointF end = new PointF(right, bottom + borderWidth.bottom/2);
+            drawSide(width, start, end, canvas);
           }
           if (borderBottom > 0) {
-            mPathForSingleBorder.reset();
             int width = Math.round(borderWidth.bottom);
-            updatePathEffect(width);
-            mPaint.setStrokeWidth(width);
-            mPathForSingleBorder.moveTo(left, bottom);
-            mPathForSingleBorder.lineTo(right, bottom);
-            canvas.drawPath(mPathForSingleBorder, mPaint);
+            PointF start = new PointF(left, bottom);
+            PointF end = new PointF(right, bottom);
+            drawSide(width, start, end, canvas);
           }
         }
       } else {
@@ -1215,6 +1205,15 @@ public class ReactViewBackgroundDrawable extends Drawable {
         mPaint.setAntiAlias(true);
       }
     }
+  }
+
+  private void drawSide(int width, PointF start, PointF end, Canvas canvas) {
+    mPathForSingleBorder.reset();
+    updatePathEffect(width);
+    mPaint.setStrokeWidth(width);
+    mPathForSingleBorder.moveTo(start.x, start.y);
+    mPathForSingleBorder.lineTo(end.x, end.y);
+    canvas.drawPath(mPathForSingleBorder, mPaint);
   }
 
   private void drawQuadrilateral(
