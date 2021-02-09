@@ -13,6 +13,7 @@
 const React = require('react');
 
 const {
+  TouchableOpacity,
   Button,
   Platform,
   Text,
@@ -71,6 +72,115 @@ const styles = StyleSheet.create({
     fontSize: 12,
   },
 });
+
+function replace(previous, range, chars) {
+  const text = previous.slice(0, range.start) + chars + previous.slice(range.end)
+  const sel = range.start + chars.length
+  return {
+    text,
+    selection: {start: sel, end: sel}
+  }
+}
+
+class Main extends React.Component {
+  constructor(props) {
+    super(props)
+    this.state = {
+      selection: null,
+      text: ''
+    }
+  }
+
+  resetText = () => {
+    this.setState({
+      selection: {
+        start: 10,
+        end: 10
+      },
+      text: 'Large Text'
+    })
+  }
+
+  onSelectionChange = evt => {
+    console.log('onSelectionChange: ', evt.nativeEvent)
+
+    let nextSelection = evt.nativeEvent.selection
+    if (!this.inputEvent) {
+      return this.setState({selection: nextSelection})
+    }
+
+    const {previousText, text, range} = this.inputEvent
+    let nextText = replace(this.state.text, range, text).text
+    delete this.inputEvent
+
+    function replaceInputWith(chars) {
+      const result = replace(previousText, range, chars)
+      nextText = result.text
+      nextSelection = result.selection
+    }
+
+    switch (text) {
+      case '@': {
+        replaceInputWith('@Mihail')
+        break
+      }
+
+      case '\n': {
+        replaceInputWith('\n- ')
+        break
+      }
+    }
+
+    this.setState({
+      text: nextText,
+      selection: nextSelection
+    })
+  }
+
+  onChange = evt => {
+    console.log('onChange: ', evt.nativeEvent)
+  }
+
+  onChangeText = evt => {
+    console.log('onChangeText: ', evt)
+  }
+
+  setState(state) {
+    console.log('SetState: ', state)
+    super.setState(state)
+  }
+
+  onTextInput = evt => {
+    console.log('onTextInput: ', evt.nativeEvent)
+    this.inputEvent = evt.nativeEvent
+  }
+
+  onKeyPress = evt => {
+    console.log('onKeyPress: ', evt.nativeEvent)
+  }
+
+  render() {
+    return (
+      <View>
+        <TextInput 
+          selection={this.state.selection}
+          value={this.state.text}
+          placeholder={'Say Something'}
+          onSelectionChange={this.onSelectionChange}
+          onChange={this.onChange}
+          onChangeText={this.onChangeText}
+          onTextInput={this.onTextInput}
+          onKeyPress={this.onKeyPress}
+          multiline
+          autoFocus
+        />
+        <TouchableOpacity onPress={this.resetText}>
+          <Text>Click me</Text>
+        </TouchableOpacity>
+      </View>
+    )
+  }
+}
 
 class WithLabel extends React.Component<$FlowFixMeProps> {
   render() {
@@ -444,6 +554,16 @@ class SelectionExample extends React.Component<
 }
 
 module.exports = ([
+  {
+    title: 'Main',
+    render: function(): React.Node {
+      return (
+        <View>
+          <Main />
+        </View>
+      );
+    },
+  },
   {
     title: 'Auto-focus',
     render: function(): React.Node {
