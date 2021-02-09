@@ -12,6 +12,9 @@
 
 const React = require('react');
 const {
+  Keyboard,
+  SafeAreaView,
+  StatusBar,
   Alert,
   KeyboardAvoidingView,
   Modal,
@@ -29,6 +32,158 @@ const {useState} = require('react');
 const onButtonPress = () => {
   Alert.alert('Successfully Registered!');
 };
+
+function readableKeyboard(keyboardFrame) {
+  if (!keyboardFrame) {
+    return '';
+  }
+  return `H: ${Math.round(keyboardFrame.height)}, Y: ${Math.round(
+    keyboardFrame.screenY,
+  )}`;
+}
+
+function readableView(viewFrame) {
+  if (!viewFrame) {
+    return '';
+  }
+  return `H: ${Math.round(viewFrame.height)}, Y: ${Math.round(viewFrame.y)}`;
+}
+
+class DebugKeyboardAvoidingView extends React.Component {
+  state = {padding: 0};
+
+  _subscriptions = [];
+  viewRefGet = React.createRef();
+  viewFrame = undefined;
+  endKeyboardFrame = undefined;
+
+  onViewLayout = () => {
+    if (!this.viewRefGet.current) {
+      return;
+    }
+    this.viewRefGet.current.measureInWindow(this.onViewMeasure);
+  };
+
+  onViewMeasure = (x, y, width, height) => {
+    if (height > 0) {
+      this.viewFrame = {x, y, width, height};
+      this.updatePadding();
+    }
+  };
+
+  updatePadding() {
+    this.setState({padding: this.calculatePadding()});
+  }
+
+  calculatePadding() {
+    if (!this.viewFrame || !this.endKeyboardFrame) {
+      return 0;
+    }
+    return this.endKeyboardFrame.height;
+  }
+
+  handleKeyboardEvent(ev) {
+    console.log(`ev`, ev)
+    this.endKeyboardFrame = ev.endCoordinates;
+    this.startKeyboardFrame = ev.startCoordinates;
+    if (ev.duration) {
+      LayoutAnimation.animateUpdate(ev.duration);
+    }
+    this.updatePadding();
+  }
+
+  handleKeyboardWillChangeFrameAndroid = (ev) => {
+    if (!ev) {
+      this.endKeyboardFrame = undefined;
+      this.updatePadding();
+      return;
+    }
+
+    this.handleKeyboardEvent(ev);
+  };
+
+  handleKeyboardWillChangeFrameIOS = (ev) => {
+    this.handleKeyboardEvent(ev);
+  };
+
+  componentDidMount() {
+    this._subscriptions = [
+      Keyboard.addListener(
+        'keyboardDidShow',
+        this.handleKeyboardWillChangeFrameAndroid,
+      ),
+      Keyboard.addListener(
+        'keyboardDidHide',
+        this.handleKeyboardWillChangeFrameAndroid,
+      ),
+    ];
+    this.updatePadding();
+  }
+
+  componentWillUnmount() {
+    this._subscriptions.forEach((subscription) => {
+      subscription.remove();
+    });
+  }
+
+  renderDebug() {
+    return (
+      <>
+        <View
+          style={{
+            position: 'absolute',
+            backgroundColor: 'red',
+            top: 0,
+            right: 0,
+            width: 40,
+            height: this.state.padding,
+          }}
+        />
+        <View
+          style={{
+            position: 'absolute',
+            top: 0,
+            right: 40,
+            backgroundColor: 'green',
+            maxWidth: 200,
+          }}>
+          <Text style={{color: 'white'}}>
+            <Text>SAFE AREA KEYBOARD{'\n'}</Text>
+            <Text>
+              PADDING: {Math.round(this.state.padding)}
+              {'\n'}
+            </Text>
+            <Text>
+              KEYBOARD END: {readableKeyboard(this.endKeyboardFrame)}
+              {'\n'}
+            </Text>
+            <Text>
+              VIEW: {readableView(this.viewFrame)}
+              {'\n'}
+            </Text>
+          </Text>
+        </View>
+      </>
+    );
+  }
+
+  render() {
+    const {children, ...props} = this.props;
+    return (
+      <View
+        {...props}
+        ref={this.viewRefGet}
+        style={[
+          this.props.style,
+          {paddingBottom: this.state.padding, flexGrow: 1},
+        ]}
+        onLayout={this.onViewLayout}>
+        {children}
+        {this.renderDebug()}
+      </View>
+    );
+  }
+}
 
 const TextInputForm = () => {
   return (
@@ -62,58 +217,16 @@ const KeyboardAvoidingViewBehaviour = () => {
   const [modalOpen, setModalOpen] = useState(false);
   const [behavior, setBehavior] = useState('padding');
   return (
-    <View style={styles.outerContainer}>
-      <Modal animationType="fade" visible={modalOpen}>
-        <KeyboardAvoidingView behavior={behavior} style={styles.container}>
-          <View
-            style={{
-              flexDirection: 'row',
-              justifyContent: 'center',
-            }}>
-            <TouchableOpacity
-              onPress={() => setBehavior('padding')}
-              style={[
-                styles.pillStyle,
-                {backgroundColor: behavior === 'padding' ? 'blue' : 'white'},
-              ]}>
-              <Text style={{color: behavior === 'padding' ? 'white' : 'blue'}}>
-                Padding
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              onPress={() => setBehavior('position')}
-              style={[
-                styles.pillStyle,
-                {backgroundColor: behavior === 'position' ? 'blue' : 'white'},
-              ]}>
-              <Text style={{color: behavior === 'position' ? 'white' : 'blue'}}>
-                Position
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              onPress={() => setBehavior('height')}
-              style={[
-                styles.pillStyle,
-                {backgroundColor: behavior === 'height' ? 'blue' : 'white'},
-              ]}>
-              <Text
-                style={{
-                  color: behavior === 'height' ? 'white' : 'blue',
-                }}>
-                Height
-              </Text>
-            </TouchableOpacity>
-          </View>
-          <CloseButton behavior={behavior} setModalOpen={setModalOpen} />
-          <TextInputForm />
-        </KeyboardAvoidingView>
-      </Modal>
-      <View>
-        <Pressable onPress={() => setModalOpen(true)}>
-          <Text>Open Example</Text>
-        </Pressable>
-      </View>
-    </View>
+    <>
+      <StatusBar barStyle="dark-content" />
+      <SafeAreaView style={{flex: 1}}>
+        <DebugKeyboardAvoidingView>
+          <TextInput autoFocus />
+          <View style={{flex: 1}} />
+          <View style={{height: 40, backgroundColor: 'black', width: '100%'}} />
+        </DebugKeyboardAvoidingView>
+      </SafeAreaView>
+    </>
   );
 };
 
@@ -236,26 +349,6 @@ exports.examples = [
       'with this prop differently. On both iOS and Android, setting behavior is recommended.': string),
     render(): React.Node {
       return <KeyboardAvoidingViewBehaviour />;
-    },
-  },
-  {
-    title: 'Keyboard Avoiding View with keyboardVerticalOffset={distance}',
-    description: ('This is the distance between the top of the user screen and the react native' +
-      'view, may be non-zero in some use cases. Defaults to 0.': string),
-    render(): React.Node {
-      return <KeyboardAvoidingVerticalOffset />;
-    },
-  },
-  {
-    title: 'Keyboard Avoiding View with enabled={false}',
-    render(): React.Node {
-      return <KeyboardAvoidingDisabled />;
-    },
-  },
-  {
-    title: 'Keyboard Avoiding View with contentContainerStyle',
-    render(): React.Node {
-      return <KeyboardAvoidingContentContainerStyle />;
     },
   },
 ];
