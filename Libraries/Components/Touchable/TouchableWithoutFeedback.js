@@ -95,6 +95,7 @@ class TouchableWithoutFeedback extends React.Component<Props, State> {
   };
 
   render(): React.Node {
+    const {disabled} = this.props;
     const element = React.Children.only(this.props.children);
     const children = [element.props.children];
     if (__DEV__) {
@@ -113,9 +114,14 @@ class TouchableWithoutFeedback extends React.Component<Props, State> {
       ...eventHandlersWithoutBlurAndFocus
     } = this.state.pressability.getEventHandlers();
 
+    const accessibilityState =
+      disabled != null
+        ? {...this.props.accessibilityState, disabled}
+        : this.props.accessibilityState;
     const elementProps: {[string]: mixed, ...} = {
       ...eventHandlersWithoutBlurAndFocus,
       accessible: this.props.accessible !== false,
+      accessibilityState,
       focusable:
         this.props.focusable !== false && this.props.onPress !== undefined,
     };
