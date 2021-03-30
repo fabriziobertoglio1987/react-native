@@ -20,6 +20,7 @@
 #include "ComponentFactory.h"
 #include "EventBeatManager.h"
 #include "JBackgroundExecutor.h"
+#include "SurfaceHandlerBinding.h"
 
 namespace facebook {
 namespace react {
@@ -124,6 +125,10 @@ class Binding : public jni::HybridClass<Binding>,
 
   void stopSurface(jint surfaceId);
 
+  void registerSurface(SurfaceHandlerBinding *surfaceHandler);
+
+  void unregisterSurface(SurfaceHandlerBinding *surfaceHandler);
+
   void schedulerDidFinishTransaction(
       MountingCoordinator::Shared const &mountingCoordinator) override;
 
@@ -142,7 +147,8 @@ class Binding : public jni::HybridClass<Binding>,
 
   void schedulerDidSetIsJSResponder(
       ShadowView const &shadowView,
-      bool isJSResponder) override;
+      bool isJSResponder,
+      bool blockNativeResponder) override;
 
   void setPixelDensity(float pointScaleFactor);
 
@@ -163,6 +169,10 @@ class Binding : public jni::HybridClass<Binding>,
 
   std::shared_ptr<Scheduler> scheduler_;
   std::mutex schedulerMutex_;
+
+  better::map<SurfaceId, SurfaceHandler> surfaceHandlerRegistry_{};
+  better::shared_mutex
+      surfaceHandlerRegistryMutex_; // Protects `surfaceHandlerRegistry_`.
 
   std::recursive_mutex commitMutex_;
 

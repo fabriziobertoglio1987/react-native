@@ -9,6 +9,7 @@ package com.facebook.react.fabric.mounting;
 
 import static com.facebook.infer.annotation.ThreadConfined.ANY;
 
+import android.text.Spannable;
 import android.view.View;
 import androidx.annotation.AnyThread;
 import androidx.annotation.NonNull;
@@ -22,6 +23,7 @@ import com.facebook.react.bridge.ReadableArray;
 import com.facebook.react.bridge.ReadableMap;
 import com.facebook.react.bridge.RetryableMountingLayerException;
 import com.facebook.react.bridge.UiThreadUtil;
+import com.facebook.react.common.mapbuffer.ReadableMapBuffer;
 import com.facebook.react.fabric.FabricUIManager;
 import com.facebook.react.fabric.events.EventEmitterWrapper;
 import com.facebook.react.fabric.mounting.mountitems.MountItem;
@@ -30,6 +32,8 @@ import com.facebook.react.uimanager.IllegalViewOperationException;
 import com.facebook.react.uimanager.RootViewManager;
 import com.facebook.react.uimanager.ThemedReactContext;
 import com.facebook.react.uimanager.ViewManagerRegistry;
+import com.facebook.react.views.text.ReactTextViewManagerCallback;
+import com.facebook.react.views.text.TextLayoutManagerMapBuffer;
 import com.facebook.yoga.YogaMeasureMode;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -271,37 +275,14 @@ public class MountingManager {
   }
 
   /**
-   * Set the JS responder for the view associated with the tags received as a parameter.
-   *
-   * <p>The JSResponder coordinates the return values of the onInterceptTouch method in Android
-   * Views. This allows JS to coordinate when a touch should be handled by JS or by the Android
-   * native views. See {@link JSResponderHandler} for more details.
-   *
-   * <p>This method is going to be executed on the UIThread as soon as it is delivered from JS to
-   * RN.
-   *
-   * <p>Currently, there is no warranty that the view associated with the react tag exists, because
-   * this method is not handled by the react commit process.
-   *
-   * @param reactTag React tag of the first parent of the view that is NOT virtual
-   * @param initialReactTag React tag of the JS view that initiated the touch operation
-   * @param blockNativeResponder If native responder should be blocked or not
-   */
-  @UiThread
-  public synchronized void setJSResponder(
-      int surfaceId, int reactTag, int initialReactTag, boolean blockNativeResponder) {
-    UiThreadUtil.assertOnUiThread();
-
-    getSurfaceManagerEnforced(surfaceId, "setJSResponder")
-        .setJSResponder(reactTag, initialReactTag, blockNativeResponder);
-  }
-
-  /**
    * Clears the JS Responder specified by {@link #setJSResponder(int, int, int, boolean)}. After
    * this method is called, all the touch events are going to be handled by JS.
    */
   @UiThread
   public void clearJSResponder() {
+    // MountingManager and SurfaceMountingManagers all share the same JSResponderHandler.
+    // Must be called on MountingManager instead of SurfaceMountingManager, because we don't
+    // know what surfaceId it's being called for.
     mJSResponderHandler.clearJSResponder();
   }
 
@@ -358,6 +339,49 @@ public class MountingManager {
             height,
             heightMode,
             attachmentsPositions);
+  }
+
+  /**
+   * Measure a component, given localData, props, state, and measurement information. This needs to
+   * remain here for now - and not in SurfaceMountingManager - because sometimes measures are made
+   * outside of the context of a Surface; especially from C++ before StartSurface is called.
+   *
+   * @param context
+   * @param componentName
+   * @param attributedString
+   * @param paragraphAttributes
+   * @param width
+   * @param widthMode
+   * @param height
+   * @param heightMode
+   * @param attachmentsPositions
+   * @return
+   */
+  @AnyThread
+  public long measureTextMapBuffer(
+      @NonNull ReactContext context,
+      @NonNull String componentName,
+      @NonNull ReadableMapBuffer attributedString,
+      @NonNull ReadableMapBuffer paragraphAttributes,
+      float width,
+      @NonNull YogaMeasureMode widthMode,
+      float height,
+      @NonNull YogaMeasureMode heightMode,
+      @Nullable float[] attachmentsPositions) {
+
+    return TextLayoutManagerMapBuffer.measureText(
+        context,
+        attributedString,
+        paragraphAttributes,
+        width,
+        widthMode,
+        height,
+        heightMode,
+        new ReactTextViewManagerCallback() {
+          @Override
+          public void onPostProcessSpannable(Spannable text) {}
+        },
+        attachmentsPositions);
   }
 
   public void initializeViewManager(String componentName) {

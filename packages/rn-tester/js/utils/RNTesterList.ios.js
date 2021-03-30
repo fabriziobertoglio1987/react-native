@@ -32,6 +32,21 @@ const ComponentExamples: Array<RNTesterExample> = [
     supportsTVOS: true,
   },
   {
+    key: 'FlatList-withSeparators',
+    module: require('../examples/FlatList/FlatList-withSeparators'),
+    category: 'ListView',
+  },
+  {
+    key: 'FlatList-onViewableItemsChanged',
+    module: require('../examples/FlatList/FlatList-onViewableItemsChanged'),
+    category: 'ListView',
+  },
+  {
+    key: 'FlatList-onEndReached',
+    module: require('../examples/FlatList/FlatList-onEndReached'),
+    category: 'ListView',
+  },
+  {
     key: 'ImageExample',
     module: require('../examples/Image/ImageExample'),
     category: 'Basic',
@@ -109,8 +124,13 @@ const ComponentExamples: Array<RNTesterExample> = [
     category: 'ListView',
   },
   {
-    key: 'SectionList_stickyHeadersEnabled',
+    key: 'SectionList-stickyHeadersEnabled',
     module: require('../examples/SectionList/SectionList-stickyHeadersEnabled'),
+    category: 'ListView',
+  },
+  {
+    key: 'SectionList-withSeparators',
+    module: require('../examples/SectionList/SectionList-withSeparators'),
     category: 'ListView',
   },
   {

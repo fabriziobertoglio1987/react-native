@@ -8,8 +8,19 @@
  * @format
  */
 
-import {Button, SectionList, StyleSheet, Text, View} from 'react-native';
+import {
+  Pressable,
+  Button,
+  SectionList,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
+
 import * as React from 'react';
+type SectionListProps = React.ElementProps<typeof SectionList>;
+
+type ViewabilityConfig = $PropertyType<SectionListProps, 'viewabilityConfig'>;
 
 const DATA = [
   {
@@ -30,17 +41,53 @@ const DATA = [
   },
 ];
 
-const VIEWABILITY_CONFIG = {
-  minimumViewTime: 1000,
-  viewAreaCoveragePercentThreshold: 100,
-  waitForInteraction: true,
+const Item = ({item, section, separators}) => {
+  return (
+    <Pressable
+      onPressIn={() => {
+        separators.highlight();
+      }}
+      onPress={() => {
+        separators.updateProps('trailing', {hasBeenHighlighted: true});
+        separators.updateProps('leading', {hasBeenHighlighted: true});
+      }}
+      onPressOut={() => {
+        separators.unhighlight();
+      }}
+      style={({pressed}) => [
+        styles.item,
+        {
+          backgroundColor: pressed ? 'red' : 'pink',
+        },
+      ]}
+      testID={item}>
+      <Text style={styles.title}>{item}</Text>
+    </Pressable>
+  );
 };
 
-const Item = ({title}) => (
-  <View style={styles.item} testID={title}>
-    <Text style={styles.title}>{title}</Text>
-  </View>
-);
+const Separator = (defaultColor, highlightColor, isSectionSeparator) => ({
+  leadingItem,
+  trailingItem,
+  highlighted,
+  hasBeenHighlighted,
+}) => {
+  const text = `${
+    isSectionSeparator ? 'Section ' : ''
+  }separator for leading ${leadingItem} and trailing ${trailingItem} has ${
+    !hasBeenHighlighted ? 'not ' : ''
+  }been pressed`;
+
+  return (
+    <View
+      style={[
+        styles.separator,
+        {backgroundColor: highlighted ? highlightColor : defaultColor},
+      ]}>
+      <Text style={styles.separtorText}>{text}</Text>
+    </View>
+  );
+};
 
 export function SectionList_inverted(): React.Node {
   const [output, setOutput] = React.useState('inverted false');
@@ -62,6 +109,50 @@ export function SectionList_inverted(): React.Node {
       onTest={onTest}
       testLabel={exampleProps.inverted ? 'Toggle false' : 'Toggle true'}
     />
+  );
+}
+
+export function SectionList_contentInset(): React.Node {
+  const [initialContentInset, toggledContentInset] = [44, 88];
+
+  const [output, setOutput] = React.useState(
+    `contentInset top: ${initialContentInset.toString()}`,
+  );
+  const [exampleProps, setExampleProps] = React.useState({
+    automaticallyAdjustContentInsets: false,
+    contentInset: {top: initialContentInset},
+    contentOffset: {y: -initialContentInset, x: 0},
+  });
+
+  const onTest = () => {
+    const newContentInset =
+      exampleProps.contentInset.top === initialContentInset
+        ? toggledContentInset
+        : initialContentInset;
+    setExampleProps({
+      automaticallyAdjustContentInsets: false,
+      contentInset: {top: newContentInset},
+      contentOffset: {y: -newContentInset, x: 0},
+    });
+    setOutput(`contentInset top: ${newContentInset.toString()}`);
+  };
+
+  return (
+    <>
+      <View
+        style={[
+          styles.titleContainer,
+          {height: exampleProps.contentInset.top},
+        ]}>
+        <Text style={styles.titleText}>Menu</Text>
+      </View>
+      <SectionListExampleWithForwardedRef
+        exampleProps={exampleProps}
+        testOutput={output}
+        onTest={onTest}
+        testLabel={'Toggle header size'}
+      />
+    </>
   );
 }
 
@@ -100,7 +191,7 @@ export function SectionList_onEndReached(): React.Node {
     onEndReached: info => setOutput('onEndReached'),
     onEndReachedThreshold: 0,
   };
-  const ref = React.createRef<?React.ElementRef<typeof SectionList>>();
+  const ref = React.useRef(null);
 
   const onTest = () => {
     const scrollResponder = ref?.current?.getScrollResponder();
@@ -119,7 +210,24 @@ export function SectionList_onEndReached(): React.Node {
   );
 }
 
-export function SectionList_onViewableItemsChanged(): React.Node {
+export function SectionList_withSeparators(): React.Node {
+  const exampleProps = {
+    ItemSeparatorComponent: Separator('lightgreen', 'green', false),
+    SectionSeparatorComponent: Separator('lightblue', 'blue', true),
+  };
+  const ref = React.useRef(null);
+
+  return (
+    <SectionListExampleWithForwardedRef ref={ref} exampleProps={exampleProps} />
+  );
+}
+
+export function SectionList_onViewableItemsChanged(props: {
+  viewabilityConfig: ViewabilityConfig,
+  offScreen?: ?boolean,
+  horizontal?: ?boolean,
+}): React.Node {
+  const {viewabilityConfig, offScreen, horizontal} = props;
   const [output, setOutput] = React.useState('');
   const exampleProps = {
     onViewableItemsChanged: info =>
@@ -129,15 +237,16 @@ export function SectionList_onViewableItemsChanged(): React.Node {
           .map(viewToken => viewToken.item)
           .join(', '),
       ),
-    viewabilityConfig: VIEWABILITY_CONFIG,
+    viewabilityConfig,
+    horizontal,
   };
 
   return (
     <SectionListExampleWithForwardedRef
       exampleProps={exampleProps}
-      onTest={null}
-      testOutput={output}
-    />
+      testOutput={output}>
+      {offScreen === true ? <View style={styles.offScreen} /> : null}
+    </SectionListExampleWithForwardedRef>
   );
 }
 
@@ -145,34 +254,36 @@ type Props = {
   exampleProps: $Shape<React.ElementConfig<typeof SectionList>>,
   onTest?: ?() => void,
   testLabel?: ?string,
-  testOutput: ?string,
+  testOutput?: ?string,
+  children?: ?React.Node,
 };
 
 const SectionListExampleWithForwardedRef = React.forwardRef(
-  function SectionListExample(
-    props: Props,
-    ref: ?React.ElementRef<typeof SectionListExampleWithForwardedRef>,
-  ): React.Node {
+  (props: Props, ref): React.Node => {
     return (
-      <View>
-        <View testID="test_container" style={styles.testContainer}>
-          <Text numberOfLines={1} testID="output">
-            {props.testOutput}
-          </Text>
-          {props.onTest != null ? (
-            <Button
-              testID="start_test"
-              onPress={props.onTest}
-              title={props.testLabel ?? 'Test'}
-            />
-          ) : null}
-        </View>
+      <View style={styles.container}>
+        {props.testOutput != null ? (
+          <View testID="test_container" style={styles.testContainer}>
+            <Text numberOfLines={1} testID="output">
+              {props.testOutput}
+            </Text>
+            {props.onTest != null ? (
+              <Button
+                testID="start_test"
+                onPress={props.onTest}
+                title={props.testLabel ?? 'Test'}
+              />
+            ) : null}
+          </View>
+        ) : null}
+        {props.children}
         <SectionList
           ref={ref}
           testID="section_list"
           sections={DATA}
           keyExtractor={(item, index) => item + index}
-          renderItem={({item}) => <Item title={item} />}
+          style={styles.list}
+          renderItem={Item}
           renderSectionHeader={({section: {title}}) => (
             <Text style={styles.header}>{title}</Text>
           )}
@@ -196,14 +307,43 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 24,
   },
+  titleContainer: {
+    position: 'absolute',
+    top: 45,
+    left: 0,
+    right: 0,
+    justifyContent: 'flex-end',
+    alignItems: 'center',
+    backgroundColor: 'gray',
+    zIndex: 1,
+  },
+  titleText: {
+    fontSize: 24,
+    lineHeight: 44,
+    fontWeight: 'bold',
+  },
   testContainer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     backgroundColor: '#f2f2f7ff',
     padding: 4,
+    height: 40,
   },
   output: {
     fontSize: 12,
+  },
+  separator: {
+    height: 12,
+  },
+  separtorText: {
+    fontSize: 10,
+  },
+  list: {
+    flex: 1,
+  },
+  container: {flex: 1},
+  offScreen: {
+    height: 1000,
   },
 });

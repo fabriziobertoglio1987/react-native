@@ -105,7 +105,7 @@ static inline int getIntBufferSizeForType(CppMountItem::Type mountItemType) {
   } else if (mountItemType == CppMountItem::Type::UpdatePadding) {
     return 5; // tag, top, left, bottom, right
   } else if (mountItemType == CppMountItem::Type::UpdateLayout) {
-    return 7; // tag, x, y, w, h, layoutDirection, DisplayType
+    return 6; // tag, x, y, w, h, DisplayType
   } else if (mountItemType == CppMountItem::Type::UpdateEventEmitter) {
     return 1; // tag
   } else {
@@ -251,17 +251,24 @@ void Binding::startSurface(
     return;
   }
 
-  LayoutContext context;
-  context.pointScaleFactor = pointScaleFactor_;
-  scheduler->startSurface(
-      surfaceId,
-      moduleName->toStdString(),
-      initialProps->consume(),
-      {},
-      context);
+  auto layoutContext = LayoutContext{};
+  layoutContext.pointScaleFactor = pointScaleFactor_;
 
-  scheduler->findMountingCoordinator(surfaceId)->setMountingOverrideDelegate(
+  auto surfaceHandler = SurfaceHandler{moduleName->toStdString(), surfaceId};
+  surfaceHandler.setProps(initialProps->consume());
+  surfaceHandler.constraintLayout({}, layoutContext);
+
+  scheduler->registerSurface(surfaceHandler);
+
+  surfaceHandler.start();
+
+  surfaceHandler.getMountingCoordinator()->setMountingOverrideDelegate(
       animationDriver_);
+
+  {
+    std::unique_lock<better::shared_mutex> lock(surfaceHandlerRegistryMutex_);
+    surfaceHandlerRegistry_.emplace(surfaceId, std::move(surfaceHandler));
+  }
 }
 
 void Binding::startSurfaceWithConstraints(
@@ -306,15 +313,21 @@ void Binding::startSurfaceWithConstraints(
   constraints.layoutDirection =
       isRTL ? LayoutDirection::RightToLeft : LayoutDirection::LeftToRight;
 
-  scheduler->startSurface(
-      surfaceId,
-      moduleName->toStdString(),
-      initialProps->consume(),
-      constraints,
-      context);
+  auto surfaceHandler = SurfaceHandler{moduleName->toStdString(), surfaceId};
+  surfaceHandler.setProps(initialProps->consume());
+  surfaceHandler.constraintLayout(constraints, context);
 
-  scheduler->findMountingCoordinator(surfaceId)->setMountingOverrideDelegate(
+  scheduler->registerSurface(surfaceHandler);
+
+  surfaceHandler.start();
+
+  surfaceHandler.getMountingCoordinator()->setMountingOverrideDelegate(
       animationDriver_);
+
+  {
+    std::unique_lock<better::shared_mutex> lock(surfaceHandlerRegistryMutex_);
+    surfaceHandlerRegistry_.emplace(surfaceId, std::move(surfaceHandler));
+  }
 }
 
 void Binding::renderTemplateToSurface(jint surfaceId, jstring uiTemplate) {
@@ -346,7 +359,29 @@ void Binding::stopSurface(jint surfaceId) {
     return;
   }
 
-  scheduler->stopSurface(surfaceId);
+  {
+    std::unique_lock<better::shared_mutex> lock(surfaceHandlerRegistryMutex_);
+
+    auto iterator = surfaceHandlerRegistry_.find(surfaceId);
+
+    if (iterator == surfaceHandlerRegistry_.end()) {
+      LOG(ERROR) << "Binding::stopSurface: Surface with given id is not found";
+      return;
+    }
+
+    auto surfaceHandler = std::move(iterator->second);
+    surfaceHandlerRegistry_.erase(iterator);
+    surfaceHandler.stop();
+    scheduler->unregisterSurface(surfaceHandler);
+  }
+}
+
+void Binding::registerSurface(SurfaceHandlerBinding *surfaceHandler) {
+  surfaceHandler->registerScheduler(getScheduler());
+}
+
+void Binding::unregisterSurface(SurfaceHandlerBinding *surfaceHandler) {
+  surfaceHandler->unregisterScheduler(getScheduler());
 }
 
 static inline float scale(Float value, Float pointScaleFactor) {
@@ -399,7 +434,20 @@ void Binding::setConstraints(
   constraints.layoutDirection =
       isRTL ? LayoutDirection::RightToLeft : LayoutDirection::LeftToRight;
 
-  scheduler->constraintSurfaceLayout(surfaceId, constraints, context);
+  {
+    std::shared_lock<better::shared_mutex> lock(surfaceHandlerRegistryMutex_);
+
+    auto iterator = surfaceHandlerRegistry_.find(surfaceId);
+
+    if (iterator == surfaceHandlerRegistry_.end()) {
+      LOG(ERROR)
+          << "Binding::setConstraints: Surface with given id is not found";
+      return;
+    }
+
+    auto &surfaceHandler = iterator->second;
+    surfaceHandler.constraintLayout(constraints, context);
+  }
 }
 
 void Binding::installFabricUIManager(
@@ -459,6 +507,11 @@ void Binding::installFabricUIManager(
 
   // Keep reference to config object and cache some feature flags here
   reactNativeConfig_ = config;
+
+  contextContainer->insert(
+      "MapBufferSerializationEnabled",
+      reactNativeConfig_->getBool(
+          "react_fabric:enable_mapbuffer_serialization_android"));
 
   disablePreallocateViews_ = reactNativeConfig_->getBool(
       "react_fabric:disabled_view_preallocation_android");
@@ -570,8 +623,7 @@ void Binding::schedulerDidFinishTransaction(
     auto &mutationType = mutation.type;
     auto &index = mutation.index;
 
-    bool isVirtual = newChildShadowView.layoutMetrics == EmptyLayoutMetrics &&
-        oldChildShadowView.layoutMetrics == EmptyLayoutMetrics;
+    bool isVirtual = mutation.mutatedViewIsVirtual();
 
     switch (mutationType) {
       case ShadowViewMutation::Create: {
@@ -918,8 +970,6 @@ void Binding::schedulerDidFinishTransaction(
       int y = round(scale(frame.origin.y, pointScaleFactor));
       int w = round(scale(frame.size.width, pointScaleFactor));
       int h = round(scale(frame.size.height, pointScaleFactor));
-      int layoutDirection =
-          toInt(mountItem.newChildShadowView.layoutMetrics.layoutDirection);
       int displayType =
           toInt(mountItem.newChildShadowView.layoutMetrics.displayType);
 
@@ -928,10 +978,9 @@ void Binding::schedulerDidFinishTransaction(
       temp[2] = y;
       temp[3] = w;
       temp[4] = h;
-      temp[5] = layoutDirection;
-      temp[6] = displayType;
-      env->SetIntArrayRegion(intBufferArray, intBufferPosition, 7, temp);
-      intBufferPosition += 7;
+      temp[5] = displayType;
+      env->SetIntArrayRegion(intBufferArray, intBufferPosition, 6, temp);
+      intBufferPosition += 6;
     }
   }
   if (cppUpdateEventEmitterMountItems.size() > 0) {
@@ -1145,7 +1194,8 @@ void Binding::schedulerDidSendAccessibilityEvent(
 
 void Binding::schedulerDidSetIsJSResponder(
     ShadowView const &shadowView,
-    bool isJSResponder) {
+    bool isJSResponder,
+    bool blockNativeResponder) {
   jni::global_ref<jobject> localJavaUIManager = getJavaUIManager();
   if (!localJavaUIManager) {
     LOG(ERROR) << "Binding::schedulerSetJSResponder: JavaUIManager disappeared";
@@ -1170,28 +1220,31 @@ void Binding::schedulerDidSetIsJSResponder(
         // be flattened because the only component that uses this feature -
         // ScrollView - cannot be flattened.
         shadowView.tag,
-        (jboolean) true);
+        (jboolean)blockNativeResponder);
   } else {
     clearJSResponder(localJavaUIManager);
   }
 }
 
 void Binding::registerNatives() {
-  registerHybrid(
-      {makeNativeMethod("initHybrid", Binding::initHybrid),
-       makeNativeMethod(
-           "installFabricUIManager", Binding::installFabricUIManager),
-       makeNativeMethod("startSurface", Binding::startSurface),
-       makeNativeMethod(
-           "startSurfaceWithConstraints", Binding::startSurfaceWithConstraints),
-       makeNativeMethod(
-           "renderTemplateToSurface", Binding::renderTemplateToSurface),
-       makeNativeMethod("stopSurface", Binding::stopSurface),
-       makeNativeMethod("setConstraints", Binding::setConstraints),
-       makeNativeMethod("setPixelDensity", Binding::setPixelDensity),
-       makeNativeMethod("driveCxxAnimations", Binding::driveCxxAnimations),
-       makeNativeMethod(
-           "uninstallFabricUIManager", Binding::uninstallFabricUIManager)});
+  registerHybrid({
+      makeNativeMethod("initHybrid", Binding::initHybrid),
+      makeNativeMethod(
+          "installFabricUIManager", Binding::installFabricUIManager),
+      makeNativeMethod("startSurface", Binding::startSurface),
+      makeNativeMethod(
+          "startSurfaceWithConstraints", Binding::startSurfaceWithConstraints),
+      makeNativeMethod(
+          "renderTemplateToSurface", Binding::renderTemplateToSurface),
+      makeNativeMethod("stopSurface", Binding::stopSurface),
+      makeNativeMethod("setConstraints", Binding::setConstraints),
+      makeNativeMethod("setPixelDensity", Binding::setPixelDensity),
+      makeNativeMethod("driveCxxAnimations", Binding::driveCxxAnimations),
+      makeNativeMethod(
+          "uninstallFabricUIManager", Binding::uninstallFabricUIManager),
+      makeNativeMethod("registerSurface", Binding::registerSurface),
+      makeNativeMethod("unregisterSurface", Binding::unregisterSurface),
+  });
 }
 
 } // namespace react

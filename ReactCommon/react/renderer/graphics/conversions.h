@@ -9,6 +9,7 @@
 
 #include <better/map.h>
 #include <folly/dynamic.h>
+#include <react/debug/react_native_assert.h>
 #include <react/renderer/core/RawProps.h>
 #include <react/renderer/graphics/Color.h>
 #include <react/renderer/graphics/Geometry.h>
@@ -19,10 +20,10 @@ namespace react {
 #pragma mark - Color
 
 inline void fromRawValue(const RawValue &value, SharedColor &result) {
-  float red;
-  float green;
-  float blue;
-  float alpha;
+  float red = 0;
+  float green = 0;
+  float blue = 0;
+  float alpha = 0;
 
   if (value.hasType<int>()) {
     auto argb = (int64_t)value;
@@ -34,20 +35,29 @@ inline void fromRawValue(const RawValue &value, SharedColor &result) {
   } else if (value.hasType<std::vector<float>>()) {
     auto items = (std::vector<float>)value;
     auto length = items.size();
-    assert(length == 3 || length == 4);
+    react_native_assert(length == 3 || length == 4);
     red = items.at(0);
     green = items.at(1);
     blue = items.at(2);
-    alpha = length == 4 ? items.at(3) : 1.0;
-  } else {
-    abort();
+    alpha = length == 4 ? items.at(3) : 1.0f;
   }
+
   result = colorFromComponents({red, green, blue, alpha});
 }
 
 #ifdef ANDROID
 
 inline folly::dynamic toDynamic(const SharedColor &color) {
+  ColorComponents components = colorComponentsFromColor(color);
+  auto ratio = 255.f;
+  return (
+      ((int)round(components.alpha * ratio) & 0xff) << 24 |
+      ((int)round(components.red * ratio) & 0xff) << 16 |
+      ((int)round(components.green * ratio) & 0xff) << 8 |
+      ((int)round(components.blue * ratio) & 0xff));
+}
+
+inline int toMapBuffer(const SharedColor &color) {
   ColorComponents components = colorComponentsFromColor(color);
   auto ratio = 255.f;
   return (
@@ -85,7 +95,7 @@ inline void fromRawValue(const RawValue &value, Point &result) {
 
   if (value.hasType<std::vector<Float>>()) {
     auto array = (std::vector<Float>)value;
-    assert(array.size() == 2);
+    react_native_assert(array.size() == 2);
     result = {array.at(0), array.at(1)};
     return;
   }
@@ -108,7 +118,7 @@ inline void fromRawValue(const RawValue &value, Size &result) {
 
   if (value.hasType<std::vector<Float>>()) {
     auto array = (std::vector<Float>)value;
-    assert(array.size() == 2);
+    react_native_assert(array.size() == 2);
     result = {array.at(0), array.at(1)};
     return;
   }
@@ -140,7 +150,7 @@ inline void fromRawValue(const RawValue &value, EdgeInsets &result) {
 
   if (value.hasType<std::vector<Float>>()) {
     auto array = (std::vector<Float>)value;
-    assert(array.size() == 4);
+    react_native_assert(array.size() == 4);
     result = {array.at(0), array.at(1), array.at(2), array.at(3)};
     return;
   }
@@ -172,7 +182,7 @@ inline void fromRawValue(const RawValue &value, CornerInsets &result) {
 
   if (value.hasType<std::vector<Float>>()) {
     auto array = (std::vector<Float>)value;
-    assert(array.size() == 4);
+    react_native_assert(array.size() == 4);
     result = {array.at(0), array.at(1), array.at(2), array.at(3)};
     return;
   }
