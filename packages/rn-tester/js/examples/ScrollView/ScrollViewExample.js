@@ -180,6 +180,15 @@ exports.examples = ([
     },
   },
   {
+    name: 'multipleStickyHeaders',
+    title: '<ScrollView> Multiple Sticky Headers\n',
+    description:
+      'Scroll down to see 3 sticky headers stick when they get to the top.',
+    render: function(): React.Node {
+      return <MultipleStickyHeaders />;
+    },
+  },
+  {
     name: 'keyboardShouldPersistTaps',
     title: '<ScrollView> Keyboard Options\n',
     description:
@@ -253,9 +262,6 @@ if (Platform.OS === 'ios') {
       let itemCount = 6;
       class AppendingList extends React.Component<{...}, *> {
         state = {
-          /* $FlowFixMe(>=0.85.0 site=react_native_fb) This comment suppresses
-           * an error found when Flow v0.85 was deployed. To see the error,
-           * delete this comment and run Flow. */
           items: [...Array(itemCount)].map((_, ii) => (
             <Item msg={`Item ${ii}`} />
           )),
@@ -929,6 +935,42 @@ const InvertStickyHeaders = () => {
         onPress={() => setInvertStickyHeaders(!invertStickyHeaders)}
         label={'invertStickyHeaders: ' + invertStickyHeaders.toString()}
       />
+      <Button
+        label="Scroll to top"
+        onPress={() => {
+          nullthrows(_scrollView.current).scrollTo({y: 0});
+        }}
+        testID="scroll_to_top_button"
+      />
+      <Button
+        label="Scroll to bottom"
+        onPress={() => {
+          nullthrows(_scrollView.current).scrollToEnd({animated: true});
+        }}
+        testID="scroll_to_bottom_button"
+      />
+    </View>
+  );
+};
+
+const MultipleStickyHeaders = () => {
+  const _scrollView = React.useRef<?React.ElementRef<typeof ScrollView>>(null);
+  const stickyHeaderStyle = {backgroundColor: 'yellow'};
+  return (
+    <View>
+      <ScrollView
+        ref={_scrollView}
+        style={[styles.scrollView, {height: 200}]}
+        stickyHeaderIndices={[0, 13, 26]}
+        nestedScrollEnabled
+        testID="scroll_multiple_sticky_headers">
+        {<Item msg={'Sticky Header 1'} style={stickyHeaderStyle} />}
+        {ITEMS.map(createItemRow)}
+        {<Item msg={'Sticky Header 2'} style={stickyHeaderStyle} />}
+        {ITEMS.map(createItemRow)}
+        {<Item msg={'Sticky Header 3'} style={stickyHeaderStyle} />}
+        {ITEMS.map(createItemRow)}
+      </ScrollView>
       <Button
         label="Scroll to top"
         onPress={() => {

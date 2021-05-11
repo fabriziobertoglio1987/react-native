@@ -43,7 +43,6 @@ static uint16_t RCTUniqueCoalescingKeyGenerator = 0;
 @synthesize bridge = _bridge;
 @synthesize dispatchToJSThread = _dispatchToJSThread;
 @synthesize invokeJS = _invokeJS;
-@synthesize invokeJSWithModuleDotMethod = _invokeJSWithModuleDotMethod;
 
 RCT_EXPORT_MODULE()
 
@@ -198,8 +197,12 @@ RCT_EXPORT_MODULE()
 {
   if (_bridge) {
     [_bridge enqueueJSCall:[[event class] moduleDotMethod] args:[event arguments]];
-  } else if (_invokeJSWithModuleDotMethod) {
-    _invokeJSWithModuleDotMethod([[event class] moduleDotMethod], [event arguments]);
+  } else if (_invokeJS) {
+    NSString *moduleDotMethod = [[event class] moduleDotMethod];
+    NSArray<NSString *> *const components = [moduleDotMethod componentsSeparatedByString:@"."];
+    NSString *const moduleName = components[0];
+    NSString *const methodName = components[1];
+    _invokeJS(moduleName, methodName, [event arguments]);
   }
 }
 
@@ -222,6 +225,12 @@ RCT_EXPORT_MODULE()
   for (NSNumber *eventId in eventQueue) {
     [self dispatchEvent:events[eventId]];
   }
+}
+
+- (std::shared_ptr<facebook::react::TurboModule>)getTurboModule:
+    (const facebook::react::ObjCTurboModule::InitParams &)params
+{
+  return nullptr;
 }
 
 @end
